@@ -53,6 +53,16 @@ cp .env.example .env        # set QASD_API_KEYS, QASD_ADMIN_KEY and your provide
 docker compose up -d --build
 ```
 
+### Windows (runs in the background, starts at boot)
+
+From an elevated PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-windows.ps1
+```
+
+The script installs Python if needed, installs Qasd into `C:\ProgramData\Qasd` and creates keys. It also registers a "Qasd Gateway" scheduled task that starts at boot and restarts if it stops. By default Qasd listens on localhost only. Add `-Listen` to accept connections from other machines, and `-Update` to update the code while keeping your keys.
+
 ### Local, without Docker
 
 ```bash
@@ -122,7 +132,27 @@ For each request, the ledger stores:
 
 Gateway cache hits cost nothing and count their stored baseline as saved. Token counts for the original prompt are estimates when compaction ran. Provider usage is used everywhere else.
 
-## Benchmark
+## Measured results
+
+A/B benchmark on the real Anthropic API, Claude Haiku 4.5, 28 September 2026. Every request was sent twice with identical content: once straight to Anthropic, once through Qasd. Costs come from the usage Anthropic returned on each response.
+
+| Workload | Direct | Through Qasd | Saved |
+| --- | --- | --- | --- |
+| Agent session: 40 turns, ~4,600-token system prompt, tool output every turn | $1.0946 | $0.1763 | **83.9%** |
+| Same deterministic question asked 10 times | $0.0008 | $0.0001 | 89.4% |
+| **Total** | **$1.0955** | **$0.1764** | **83.9%** |
+
+Almost all of the saving comes from prompt caching. Qasd adds cache breakpoints that the direct client didn't set, so 1.03 million input tokens were billed at the cached-read rate instead of full price. The run through Qasd also finished slightly faster (70.6 s against 76.0 s).
+
+**What this measures:** a client that doesn't manage prompt caching itself, which is common in scripts, agents and many SDK integrations. Apps that already set their own `cache_control` breakpoints will see much smaller gains; Qasd leaves their breakpoints alone. Savings depend on how much of each prompt repeats between calls.
+
+Reproduce it with your own key (about $1.30 for both arms):
+
+```bash
+python scripts/real_bench.py            # reads ANTHROPIC_API_KEY and the Qasd key from the Qasd .env
+```
+
+## Benchmark (mock mode)
 
 ```bash
 QASD_MOCK_RESPONSE=ok QASD_COMPACT_TRIGGER_TOKENS=20000 python -m qasd &
