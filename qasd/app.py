@@ -136,7 +136,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/dashboard", response_class=HTMLResponse)
     async def dashboard():
-        return (STATIC / "dashboard.html").read_text()
+        return (STATIC / "dashboard.html").read_text(encoding="utf-8")
 
     @app.post("/v1/chat/completions")
     async def chat_completions(request: Request):

@@ -56,7 +56,7 @@ class Router:
     def load(cls, path: str | None) -> "Router":
         cfg = dict(DEFAULT_CONFIG)
         if path and Path(path).exists():
-            loaded = yaml.safe_load(Path(path).read_text()) or {}
+            loaded = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
             cfg.update(loaded)
         router = cls(
             tiers=cfg["tiers"],

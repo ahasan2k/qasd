@@ -55,7 +55,7 @@
   </header>
   <p id="msg" class="empty"></p>
   <div class="tiles" id="tiles"></div>
-  <section><h2>Cost per day (USD)</h2><div id="chart" class="empty">No data yet.</div></section>
+  <section><h2>Cost per day (USD, days in UTC)</h2><div id="chart" class="empty">No data yet.</div></section>
   <section><h2>By day</h2><div id="days-table"></div></section>
   <section><h2>Models</h2><div id="models"></div></section>
 </main>
@@ -95,7 +95,7 @@ function render(d) {
   const rows = d.by_day;
   if (!rows.length) { $("chart").innerHTML = "No data yet."; $("days-table").innerHTML = ""; $("models").innerHTML = ""; return; }
   const W = 960, H = 220, pad = 36, max = Math.max(...rows.map(r => r.baseline_cost_usd), 1e-9);
-  const bw = Math.max(4, (W - pad * 2) / rows.length - 6);
+  const bw = Math.min(48, Math.max(4, (W - pad * 2) / rows.length - 6));
   const x = i => pad + i * ((W - pad * 2) / rows.length);
   const y = v => H - 24 - (v / max) * (H - 48);
   let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Actual versus baseline cost per day">`;
