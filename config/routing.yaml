@@ -1,0 +1,29 @@
+# Qasd routing rules. Used only when a client sends model "auto" (or "auto:<tier>").
+# A model the client names explicitly is never changed.
+#
+# Tiers map to any model LiteLLM supports, e.g. "gpt-5-mini", "gemini-2.5-flash",
+# or a local model such as "ollama/llama3.1:8b" (set OLLAMA_API_BASE).
+tiers:
+  cheap: claude-haiku-4-5
+  mid: claude-sonnet-4-6
+  frontier: claude-opus-4-8
+
+default: cheap        # used when no rule matches
+baseline: frontier    # what "auto" requests are compared against in the savings ledger
+
+# Rules are checked top to bottom; the first match wins.
+# Conditions: min_prompt_tokens, min_last_user_words, has_tools, has_code, any_keywords.
+# All conditions inside one rule must hold.
+rules:
+  - tier: frontier
+    when: { min_prompt_tokens: 30000 }
+  - tier: frontier
+    when:
+      any_keywords: [prove, architecture, architect, design a system, security review,
+                     threat model, root cause, refactor, step by step, trade-off, tradeoff]
+  - tier: mid
+    when: { has_tools: true }
+  - tier: mid
+    when: { has_code: true }
+  - tier: mid
+    when: { min_last_user_words: 120 }

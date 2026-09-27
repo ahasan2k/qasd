@@ -1,0 +1,39 @@
+services:
+  qasd:
+    build: .
+    ports:
+      - "8787:8787"
+    env_file: .env
+    environment:
+      QASD_DATABASE_URL: postgresql+asyncpg://qasd:${POSTGRES_PASSWORD:-qasd}@postgres:5432/qasd
+      QASD_REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./config:/app/config:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: qasd
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qasd}
+      POSTGRES_DB: qasd
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qasd"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    restart: unless-stopped
+
+volumes:
+  pgdata:

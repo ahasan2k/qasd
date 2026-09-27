@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qasd"
+version = "0.1.0"
+description = "Open-source OpenAI-compatible gateway that cuts LLM token spend without breaking provider prompt caching."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.29",
+  "litellm>=1.70",
+  "sqlalchemy>=2.0",
+  "aiosqlite>=0.20",
+  "asyncpg>=0.29",
+  "redis>=5.0",
+  "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "httpx>=0.27"]
+
+[tool.setuptools.packages.find]
+include = ["qasd*"]
+
+[tool.setuptools.package-data]
+qasd = ["static/*.html"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

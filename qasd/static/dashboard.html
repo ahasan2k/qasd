@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qasd savings</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --card: #ffffff; --ink: #1c1c1a; --muted: #6b6b66; --line: #e3e3de;
+    --accent: #0f766e; --accent-soft: #ccebe7; --bar: #94a3b8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #151514; --card: #1e1e1c; --ink: #ecece8; --muted: #9a9a94; --line: #2e2e2b;
+            --accent: #2dd4bf; --accent-soft: #134e4a; --bar: #64748b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 32px 16px 64px; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; justify-content: space-between; }
+  h1 { font-size: 22px; margin: 0; }
+  .sub { color: var(--muted); margin: 4px 0 0; }
+  form { display: flex; gap: 8px; flex-wrap: wrap; }
+  input, select, button { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+                          background: var(--card); color: var(--ink); }
+  button { background: var(--accent); color: #fff; border: none; cursor: pointer; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 24px 0; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .tile .label { color: var(--muted); font-size: 13px; }
+  .tile .value { font-size: 26px; font-weight: 650; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .tile.hero { border-color: var(--accent); background: var(--accent-soft); }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; overflow-x: auto; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 500; font-size: 13px; }
+  svg text { fill: var(--muted); font-size: 11px; }
+  .err { color: #dc2626; }
+  .empty { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Qasd savings</h1>
+      <p class="sub">What the gateway cost versus sending the same requests directly.</p>
+    </div>
+    <form id="f">
+      <input id="key" type="password" placeholder="Gateway or admin key" autocomplete="off">
+      <select id="days"><option>7</option><option selected>30</option><option>90</option></select>
+      <button>Load</button>
+    </form>
+  </header>
+  <p id="msg" class="empty"></p>
+  <div class="tiles" id="tiles"></div>
+  <section><h2>Cost per day (USD)</h2><div id="chart" class="empty">No data yet.</div></section>
+  <section><h2>By day</h2><div id="days-table"></div></section>
+  <section><h2>Models</h2><div id="models"></div></section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const usd = v => "$" + Number(v).toFixed(v >= 100 ? 0 : v >= 1 ? 2 : 4);
+const num = v => Number(v).toLocaleString();
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+try { $("key").value = sessionStorage.getItem("qasd-key") || ""; } catch (e) {}
+
+async function load(ev) {
+  if (ev) ev.preventDefault();
+  const key = $("key").value.trim();
+  try { sessionStorage.setItem("qasd-key", key); } catch (e) {}
+  $("msg").textContent = "Loading…"; $("msg").className = "empty";
+  try {
+    const r = await fetch(`/qasd/stats?days=${$("days").value}`, { headers: key ? { Authorization: "Bearer " + key } : {} });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error ? data.error.message : r.statusText);
+    render(data); $("msg").textContent = "";
+  } catch (e) { $("msg").textContent = "Could not load stats: " + e.message; $("msg").className = "err"; }
+}
+
+function render(d) {
+  const t = d.totals, hits = d.gateway_cache.hit || 0;
+  const reduction = t.prompt_tokens_original ? 100 * (1 - t.prompt_tokens_sent / t.prompt_tokens_original) : 0;
+  const tiles = [
+    ["Saved", usd(t.saved_usd) + ` (${t.saved_pct}%)`, true],
+    ["Spent", usd(t.cost_usd)], ["Without Qasd", usd(t.baseline_cost_usd)],
+    ["Requests", num(t.requests)], ["Gateway cache hits", num(hits)],
+    ["Provider-cached tokens", num(t.provider_cached_tokens)],
+    ["Prompt tokens removed", reduction.toFixed(1) + "%"], ["Compacted requests", num(d.compacted_requests)],
+  ];
+  $("tiles").innerHTML = tiles.map(([l, v, h]) =>
+    `<div class="tile${h ? " hero" : ""}"><div class="label">${l}</div><div class="value">${v}</div></div>`).join("");
+
+  const rows = d.by_day;
+  if (!rows.length) { $("chart").innerHTML = "No data yet."; $("days-table").innerHTML = ""; $("models").innerHTML = ""; return; }
+  const W = 960, H = 220, pad = 36, max = Math.max(...rows.map(r => r.baseline_cost_usd), 1e-9);
+  const bw = Math.max(4, (W - pad * 2) / rows.length - 6);
+  const x = i => pad + i * ((W - pad * 2) / rows.length);
+  const y = v => H - 24 - (v / max) * (H - 48);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Actual versus baseline cost per day">`;
+  rows.forEach((r, i) => {
+    svg += `<rect x="${x(i)}" y="${y(r.baseline_cost_usd)}" width="${bw}" height="${H - 24 - y(r.baseline_cost_usd)}" rx="3" fill="var(--bar)" opacity="0.35"><title>${r.day} without Qasd ${usd(r.baseline_cost_usd)}</title></rect>`;
+    svg += `<rect x="${x(i)}" y="${y(r.cost_usd)}" width="${bw}" height="${H - 24 - y(r.cost_usd)}" rx="3" fill="var(--accent)"><title>${r.day} spent ${usd(r.cost_usd)}</title></rect>`;
+    if (rows.length <= 14 || i % Math.ceil(rows.length / 10) === 0)
+      svg += `<text x="${x(i) + bw / 2}" y="${H - 6}" text-anchor="middle">${r.day.slice(5)}</text>`;
+  });
+  svg += `<text x="${pad}" y="14">max ${usd(max)} · grey = without Qasd, teal = spent</text></svg>`;
+  $("chart").innerHTML = svg;
+
+  $("days-table").innerHTML = `<table><tr><th>Day</th><th>Requests</th><th>Prompt tokens (orig → sent)</th><th>Provider cached</th><th>Spent</th><th>Without Qasd</th><th>Saved</th></tr>` +
+    rows.slice().reverse().map(r => `<tr><td>${r.day}</td><td>${num(r.requests)}</td><td>${num(r.prompt_tokens_original)} → ${num(r.prompt_tokens_sent)}</td><td>${num(r.provider_cached_tokens)}</td><td>${usd(r.cost_usd)}</td><td>${usd(r.baseline_cost_usd)}</td><td>${usd(r.saved_usd)} (${r.saved_pct}%)</td></tr>`).join("") + `</table>`;
+  $("models").innerHTML = `<table><tr><th>Model</th><th>Requests</th><th>Spent</th></tr>` +
+    d.models.map(m => `<tr><td>${esc(m.model)}</td><td>${num(m.requests)}</td><td>${usd(m.cost_usd)}</td></tr>`).join("") + `</table>`;
+}
+$("f").addEventListener("submit", load);
+load();
+</script>
+</body>
+</html>
